@@ -70,13 +70,30 @@ fi
 #    想拿去卖钱可以, 但别想藏着源码卖。这就是 copyleft。
 #  ---------------------------------------------------------------
 #
-#  免责声明: 本脚本为独立的社群开发作品。"Minecraft" 是 Mojang
-#  Studios 的注册商标。本项目与 Mojang Studios 及 Microsoft
-#  无任何隶属、合作、赞助或授权关系, 亦非官方产品。本脚本不分发
-#  任何游戏本体文件, 游戏本体由使用者依其自身许可条款自行获取并
-#  自行接受 EULA。第三方模组、插件、整合包之著作权归各自作者所有。
-#  第三方模组、插件、整合包之著作权归各自作者所有, 本脚本仅提供
-#  下载与安装通道, 不主张其权利。
+#  ---------------------------------------------------------------
+#  免责声明 / DISCLAIMER:
+#    本脚本为独立的第三方社群开发作品, 与下列各方均无任何隶属、
+#    授权、赞助、认可或合作关系, 亦非其官方产品:
+#      - Mojang Studios (Mojang AB)
+#      - Microsoft Corporation
+#      - NeoForge / MinecraftForge / Fabric / Quilt / Paper /
+#        Spigot / Bukkit / Purpur / Folia 等各服务端与加载器项目
+#        及其开发团队
+#      - 本脚本所下载/安装的任何模组、插件、整合包之原作者与发行方
+#
+#    "Minecraft" 是 Mojang Studios 的注册商标, 本脚本仅在描述性
+#    语境下使用该名称, 用以说明本工具所服务的软件对象, 不构成任何
+#    商标主张。其余各项目名、商标均归各自权利人所有。
+#
+#    本脚本不分发、不包含、不内置任何游戏本体、服务端 jar、模组或
+#    插件的副本。所有游戏文件均在运行时由使用者自行从官方或第三方
+#    源下载, 其著作权归各自权利人所有; 本脚本仅提供下载与安装通道,
+#    不主张任何权利, 亦不对其内容负责。
+#
+#    使用本脚本即表示你确认: 你已合法取得 Minecraft 及所使用之模组、
+#    插件, 并已自行接受其 EULA 与许可条款。因使用本脚本所产生之存档
+#    损坏、数据丢失或服务中断等一切风险, 由使用者自行承担。
+#  ---------------------------------------------------------------
 # ============================================================
 
 set -uo pipefail
@@ -108,7 +125,7 @@ STATBAR=1                       # 底部运行状态栏 (1=开 0=关)
 SAVELOG=1                       # 保存运行日志到文件 (1=开 0=关)
 LOGKEEP=10                      # 运行日志保留份数 (超出自动删最旧的)
 # 版本号: 改这里即可, banner / UA / 公告 ?v= 都会跟着变
-MCSERV_VER="1.6"
+MCSERV_VER="1.6.1"
 UA="ShCraft/${MCSERV_VER} (mcserv)"
 
 # ---------- 颜色 ----------
@@ -1014,7 +1031,7 @@ log_menu() {
         echo "  5) 删除全部日志"
         echo "  0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         [ -z "$c" ] && continue
         local latest
         latest=$(ls -1t "$LOGDIR"/server-*.log 2>/dev/null | head -1)
@@ -1042,16 +1059,16 @@ log_menu() {
                    echo -e "  ${C}$i)${R} $(basename "$f")  ${Y}$(log_size "$f")${R}"
                    arr+=("$f"); i=$((i+1))
                done < <(ls -1t "$LOGDIR"/server-*.log 2>/dev/null)
-               echo; ask "序号: "; read -r k
+               echo; ask "序号: "; rd k
                local sel="${arr[$((k-1))]}"
                [ -n "$sel" ] && { echo; echo -e "  ${C}--- $sel ---${R}"; cat "$sel" 2>/dev/null | head -200
                    echo -e "  ${Y}(仅显示前 200 行, 完整文件: $sel)${R}"; }
            fi
            press;;
-        5) ask "确认删除全部运行日志? (y/N): "; read -r k
+        5) ask "确认删除全部运行日志? (y/N): "; rd k
            case "$k" in y|Y) rm -f "$LOGDIR"/server-*.log "$LOGDIR"/latest.log 2>/dev/null; say "已清空";; esac
            press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -1417,7 +1434,27 @@ for v in d[:15]:
 ' 2>/dev/null
 }
 
-press() { [ -n "${NOMENU:-}" ] && return 0; echo -e "\n${C}按回车继续...${R}"; read -r; }
+# ---------- 统一安全读取 rd() ----------
+# 专治两个顽疾:
+#   1) 一进菜单就自己退出 —— read 失败(EOF/被中断)时变量会留着上一次的
+#      值, 比如上次按过 0, 下次进菜单直接命中 0 分支就退出了。
+#      这里不管成功失败, 先把变量清空, 失败一律返回非 0。
+#   2) 要连按两次才返回 —— 子菜单和外层的 read 抢同一个 stdin,
+#      输入被别处吃掉一次。这里统一从 /dev/tty 读, 跟外层隔离。
+#  用法: rd 变量名   (成功返回 0; 失败/EOF 返回 1 且变量为空)
+rd() {
+    local __rd_v="${1:-}"
+    [ -n "$__rd_v" ] || return 1
+    printf -v "$__rd_v" '' 2>/dev/null || eval "$__rd_v=''"
+    if [ -r /dev/tty ]; then
+        IFS= read -r "$__rd_v" < /dev/tty 2>/dev/null || { printf -v "$__rd_v" ''; return 1; }
+    else
+        IFS= read -r "$__rd_v" 2>/dev/null || { printf -v "$__rd_v" ''; return 1; }
+    fi
+    return 0
+}
+# 按回车继续: 同样走 rd, 不吃掉下一次菜单的输入
+press() { [ -n "${NOMENU:-}" ] && return 0; echo -e "\n${C}按回车继续...${R}"; rd _press_k; return 0; }
 
 # 查看本机联机地址(自动识别 Astral/EasyTier/Tailscale/ZeroTier 等)
 net_info() {
@@ -1578,7 +1615,7 @@ mirror_pick() {
             say "已自动切换到最优镜像: $bestdesc"
         else
             ask "是否切换到 [$bestdesc]? [Y/n]: "
-            read -r y
+            rd y
             case "$y" in n|N) ;; *) MR_API="$best"; save_conf; say "已切换";; esac
         fi
     else
@@ -1616,7 +1653,7 @@ test_mirror() {
     echo
     if [ "$code" != "200" ]; then
         ask "是否自动探测并切换可用镜像? [Y/n]: "
-        read -r y
+        rd y
         case "$y" in n|N) ;; *) mirror_pick; return;; esac
     fi
     press
@@ -1662,7 +1699,7 @@ install_core() {
         pre=$(ls neoforge-*-installer.jar 2>/dev/null | head -1)
         if [ -n "$pre" ] && [ -s "$pre" ]; then
             say "检测到已存在的安装器: $pre"
-            ask "直接使用它? [Y/n]: "; read -r y
+            ask "直接使用它? [Y/n]: "; rd y
             case "$y" in n|N) pre="";; esac
         fi
         if [ -z "$pre" ]; then
@@ -1707,7 +1744,7 @@ install_core() {
         ;;
     forge)
         warn "Forge 在 1.21 之后已停止维护, 强烈建议改用 NeoForge!"
-        read -rp "仍要继续? (y/N): " c
+        rd c
         [ "${c,,}" != "y" ] && return 1
         dlx "forge-installer.jar" \
             "https://maven.minecraftforge.net/net/minecraftforge/forge/${mc}-latest/forge-${mc}-latest-installer.jar"
@@ -1747,7 +1784,7 @@ cloud_add() {
         fi
         echo "$res" | head -5 | cat -n
         ask "选择序号 (1=最新, 直接回车=1, s=跳过): "
-        read -r no
+        rd no
         [ "$no" = "s" ] && continue
         [ -z "$no" ] && no=1
         local line ver fname furl
@@ -1782,7 +1819,7 @@ import_pack() {
     local sdir="$1"
     title "导入整合包"
     ask "整合包文件路径 (.mrpack / .zip): "
-    read -r pf
+    rd pf
     pf=$(eval echo "${pf/#\~/$HOME}")
     [ ! -f "$pf" ] && { err "文件不存在"; return; }
 
@@ -2300,7 +2337,7 @@ ic_browse() {
         echo -e "  ${Y}直接输路径也行, 或按回车=返回${R}" >&2
         echo -e "  ${C} 0)${R} 取消" >&2
         echo >&2
-        ask "选择: " >&2; read -r n || return 1
+        ask "选择: " >&2; rd n || return 1
         case "$n" in
             0|"") return 1;;
             "..") local up; up=$(dirname "$cur"); [ -n "$up" ] && cur="$up"; continue;;
@@ -2335,14 +2372,14 @@ motd_menu() {
         echo "   4) 恢复默认"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r _mmc || return
+        ask "选择: "; rd _mmc || return
         case "$_mmc" in
-        1) ask "输入简介: "; read -r mv
+        1) ask "输入简介: "; rd mv
            [ -z "$mv" ] && continue
            mv="${mv//&/§}"
            prop_set motd "$mv" "$f"; say "已设置: $mv"; press; return;;
-        2) ask "第一行 (主标题): "; read -r m1
-           ask "第二行 (副标题): "; read -r m2
+        2) ask "第一行 (主标题): "; rd m1
+           ask "第二行 (副标题): "; rd m2
            m1="${m1//&/§}"; m2="${m2//&/§}"
            if [ -n "$m2" ]; then
                prop_set motd "${m1}\n${m2}" "$f"
@@ -2357,7 +2394,7 @@ motd_menu() {
            echo "   3) §c维护中 §7稍后再来"
            echo "   4) §b组队开黑 §7| §e快乐生存"
            echo "   0) 取消"
-           ask "选择: "; read -r mt
+           ask "选择: "; rd mt
            local val=""
            case "$mt" in
                1) val="§a欢迎来到 §6${CUR}";;
@@ -2368,7 +2405,7 @@ motd_menu() {
            esac
            prop_set motd "$val" "$f"; say "已设置: $val"; press; return;;
         4) prop_set motd "A Minecraft Server" "$f"; say "已恢复默认"; press; return;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -2404,7 +2441,7 @@ ic_syspick() {
     echo -e "  ${Y}直接回车 = 取消${R}" >&2
     local pth=""
     printf "  路径: " >&2
-    read -r pth
+    rd pth
     if [ -n "$pth" ] && [ -s "$pth" ]; then
         cp "$pth" "$dst" >/dev/null 2>&1 && { echo "$dst"; return 0; }
         # cp 失败(比如 content:// 或权限问题)再试 cat 重定向
@@ -2535,7 +2572,7 @@ ic_apply() {
         if [ -s "$elog" ]; then
             echo
             echo -e "  ${Y}失败原因:${R}"
-            grep -vE '^[[:space:]]*$' "$elog" 2>/dev/null | tail -4 | while IFS= read -r l; do
+            grep -vE '^[[:space:]]*$' "$elog" 2>/dev/null | tail -4 | while IFS= rd l; do
                 echo -e "    ${C}$l${R}"
             done
         fi
@@ -2586,7 +2623,7 @@ icon_menu() {
         echo "   7) 逐层浏览目录找图  ${Y}(扫不到时用)${R}"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1)
             local got; got=$(ic_syspick "$pickf"); local rc=$?
@@ -2635,10 +2672,10 @@ icon_menu() {
                 echo -e "  ${C}1)${R} 逐层浏览目录自己找"
                 echo -e "  ${C}2)${R} 手动输入路径"
                 echo -e "  ${C}0)${R} 返回"
-                ask "选择: "; read -r q
+                ask "选择: "; rd q
                 case "$q" in
                     1) local bp; bp=$(ic_browse); [ -n "$bp" ] && ic_apply "$bp" "$icon"; press;;
-                    2) ask "图片路径: "; read -r bp; [ -n "$bp" ] && ic_apply "$bp" "$icon"; press;;
+                    2) ask "图片路径: "; rd bp; [ -n "$bp" ] && ic_apply "$bp" "$icon"; press;;
                 esac
                 continue
             fi
@@ -2649,7 +2686,7 @@ icon_menu() {
             done
             echo -e "  ${C} 0)${R} 取消"
             echo
-            ask "选择: "; read -r n
+            ask "选择: "; rd n
             case "$n" in 0|"") continue;; esac
             [[ ! "$n" =~ ^[0-9]+$ ]] && continue
             { [ "$n" -lt 1 ] || [ "$n" -gt "${#paths[@]}" ]; } && continue
@@ -2657,7 +2694,7 @@ icon_menu() {
             [ -n "$p" ] && ic_apply "$p" "$icon"
             ;;
         3)
-            ask "图片路径: "; read -r p
+            ask "图片路径: "; rd p
             [ -z "$p" ] && continue
             p=$(eval echo "${p/#\~/$HOME}")
             ic_apply "$p" "$icon"
@@ -2686,7 +2723,7 @@ icon_menu() {
             fi
             press;;
         6) motd_menu "$pf";;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -2720,7 +2757,7 @@ srv_pick() {
       echo
       echo -ne "${C}[?]${R} 序号: "
     } > "$T"
-    if [ "$T" = "/dev/tty" ]; then read -r n < /dev/tty 2>/dev/null; else read -r n; fi
+    rd n || return 1
     [ -z "$n" ] && return 1
     [[ ! "$n" =~ ^[0-9]+$ ]] && return 1
     [ "$n" -lt 1 ] || [ "$n" -gt "${#list[@]}" ] && return 1
@@ -2762,7 +2799,7 @@ srv_menu() {
         echo "   4) 删除服务器"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1) local n; n=$(srv_pick) || continue
            [ -n "$n" ] && { CUR="$n"; save_conf; say "当前服务器: $CUR"; }
@@ -2771,7 +2808,7 @@ srv_menu() {
            [ -n "$n" ] && srv_info "$n";;
         3) local n; n=$(srv_pick) || continue
            [ -z "$n" ] && continue
-           ask "新名称: "; read -r nn
+           ask "新名称: "; rd nn
            [ -z "$nn" ] && continue
            [ -d "${ROOT}/servers/$nn" ] && { warn "已存在同名服务器"; press; continue; }
            if mv "${ROOT}/servers/$n" "${ROOT}/servers/$nn" 2>/dev/null; then
@@ -2788,11 +2825,11 @@ srv_menu() {
            [ -z "$n" ] && continue
            warn "将删除服务器 [$n] 及其全部内容 (模组/存档/配置)"
            err "此操作不可恢复!"
-           ask "确认删除? 请输入服务器名 [$n]: "; read -r cf
+           ask "确认删除? 请输入服务器名 [$n]: "; rd cf
            [ "$cf" != "$n" ] && { say "已取消"; press; continue; }
            local w; w=$(cat "${HIST_DIR}/${n}.world" 2>/dev/null || echo world)
            if [ -d "${ROOT}/servers/$n/$w" ]; then
-               ask "删除前先备份存档? (Y/n): "; read -r bk
+               ask "删除前先备份存档? (Y/n): "; rd bk
                case "$bk" in n|N) ;; *)
                    mkdir -p "${ROOT}/backups"
                    cp -r "${ROOT}/servers/$n/$w" "${ROOT}/backups/${n}_${w}_$(date +%Y%m%d_%H%M%S)" 2>/dev/null \
@@ -2803,7 +2840,7 @@ srv_menu() {
            [ "$CUR" = "$n" ] && { CUR=""; save_conf; }
            say "已删除: $n"
            press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -2830,7 +2867,7 @@ mp_menu() {
         echo "   5) 切换目录 (mods/plugins)"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1) title "$mp 列表"
            if [ "$on" -eq 0 ] && [ "$off" -eq 0 ]; then warn "目录为空"; press; continue; fi
@@ -2853,7 +2890,7 @@ mp_menu() {
                mkdir -p "$sdir/mods"; say "已切到 mods"
            fi
            press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -3000,7 +3037,7 @@ world_menu() {
         echo "   8) 导入存档 (zip / 文件夹)"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         [ -z "$c" ] && continue
         case "$c" in
         1)
@@ -3019,7 +3056,7 @@ world_menu() {
                 [ "$w" = "$cw" ] && mk="  ${G}← 当前${R}"
                 echo -e "  ${C}$i)${R} $w$mk"; i=$((i+1))
             done
-            ask "选择存档序号: "; read -r n
+            ask "选择存档序号: "; rd n
             case "$n" in ''|*[!0-9]*) continue;; esac
             local sel="${ws[$((n-1))]}"
             [ -z "$sel" ] && { warn "序号不对"; press; continue; }
@@ -3031,7 +3068,7 @@ world_menu() {
             fi
             ;;
         2)
-            ask "新存档名称 (回车=world2): "; read -r nw
+            ask "新存档名称 (回车=world2): "; rd nw
             [ -z "$nw" ] && nw="world2"
             case "$nw" in */*) err "不能带斜杠"; press; continue;; esac
             [ -d "$sdir/$nw" ] && { warn "已存在: $nw"; press; continue; }
@@ -3067,7 +3104,7 @@ world_menu() {
             local j=1
             [ ${#ws2[@]} -eq 0 ] && { warn "没有存档"; press; continue; }
             for w in "${ws2[@]}"; do echo -e "  ${C}$j)${R} $w"; j=$((j+1)); done
-            ask "选择: "; read -r n2
+            ask "选择: "; rd n2
             local tw="${ws2[$((n2-1))]}"
             [ -z "$tw" ] && continue
             title "存档详情 —— $tw"
@@ -3097,10 +3134,10 @@ world_menu() {
             local k=1
             [ ${#ws3[@]} -eq 0 ] && { warn "没有存档"; press; continue; }
             for w in "${ws3[@]}"; do echo -e "  ${C}$k)${R} $w"; k=$((k+1)); done
-            ask "选择要重命名的: "; read -r n3
+            ask "选择要重命名的: "; rd n3
             local ow="${ws3[$((n3-1))]}"
             [ -z "$ow" ] && continue
-            ask "新名称: "; read -r nw3
+            ask "新名称: "; rd nw3
             [ -z "$nw3" ] && continue
             [ -d "$sdir/$nw3" ] && { warn "已存在"; press; continue; }
             if mv "$sdir/$ow" "$sdir/$nw3" 2>/dev/null; then
@@ -3122,15 +3159,15 @@ world_menu() {
                 [ "$w" = "$cw" ] && mk2="  ${RD}← 当前${R}"
                 echo -e "  ${C}$m)${R} $w$mk2"; m=$((m+1))
             done
-            ask "选择要删除的: "; read -r n4
+            ask "选择要删除的: "; rd n4
             local dw="${ws4[$((n4-1))]}"
             [ -z "$dw" ] && continue
             [ ${#ws4[@]} -le 1 ] && { warn "只剩这一个存档了, 删了就没得玩了"; press; continue; }
             warn "将删除存档 [$dw]  $(du -sh "$sdir/$dw" 2>/dev/null | cut -f1)"
             err "世界数据不可恢复!"
-            ask "确认? 请输入存档名 [$dw]: "; read -r cf
+            ask "确认? 请输入存档名 [$dw]: "; rd cf
             [ "$cf" != "$dw" ] && { say "已取消"; press; continue; }
-            ask "删除前先备份? (Y/n): "; read -r bk2
+            ask "删除前先备份? (Y/n): "; rd bk2
             case "$bk2" in n|N) ;; *)
                 mkdir -p "${ROOT}/backups"
                 cp -r "$sdir/$dw" "${ROOT}/backups/${CUR}_${dw}_$(date +%Y%m%d_%H%M%S)" 2>/dev/null && say "已备份";;
@@ -3152,11 +3189,11 @@ world_menu() {
             echo -e "    ${C}zip 文件${R}  —— 解压后内含 world/ 或 level.dat 的压缩包"
             echo -e "    ${C}文件夹${R}    —— 直接指向已解压的世界目录"
             echo
-            ask "路径 (zip 或文件夹): "; read -r src
+            ask "路径 (zip 或文件夹): "; rd src
             [ -z "$src" ] && continue
             src=$(eval echo "${src/#\~/$HOME}")
             [ -e "$src" ] || { err "路径不存在"; press; continue; }
-            ask "导入为存档名 (默认 world2): "; read -r dst
+            ask "导入为存档名 (默认 world2): "; rd dst
             [ -z "$dst" ] && dst="world2"
             [ -d "$sdir/$dst" ] && { warn "已存在同名存档"; press; continue; }
             local tmpd="${ROOT}/tmp/imp_$$"
@@ -3184,13 +3221,13 @@ world_menu() {
             fi
             cp -r "$tmpd" "$sdir/$dst" && say "已导入为: $dst" || err "复制失败"
             rm -rf "${ROOT}/tmp/imp_$$" 2>/dev/null
-            ask "切换到此存档? (Y/n): "; read -r sw
+            ask "切换到此存档? (Y/n): "; rd sw
             case "$sw" in n|N) ;; *)
                 world_apply "$sdir" "$dst" && say "已切换到: ${G}$dst${R}";;
             esac
             warn "重启服务端生效"
             ;;
-        0) return;;
+        0|q|Q) return;;
         esac
         press
     done
@@ -3241,7 +3278,7 @@ start_server() {
     if [ -n "${pre// /}" ]; then
         warn "检测到已有服务端进程在跑: $pre"
         warn "两个实例会抢同一个端口, 新的一定起不来"
-        ask "先停掉它们? (Y/n): "; read -r kk
+        ask "先停掉它们? (Y/n): "; rd kk
         case "$kk" in n|N) ;; *)
             for pp in $pre; do kill -TERM "$pp" 2>/dev/null; done
             local w=0
@@ -3373,7 +3410,7 @@ pick_mc_version() {
     for ((i=0; i<n; i++)); do printf "  %3d) %s\n" $((i+1)) "${arr[$i]}" >&2; done
     echo >&2
     echo "  (输入序号, 或直接敲版本号如 1.21.1)" >&2
-    ask "选择 [1]: " >&2; read -r c
+    ask "选择 [1]: " >&2; rd c
     [ -z "$c" ] && c=1
     if [[ "$c" =~ ^[0-9]+$ ]] && [ "$c" -ge 1 ] && [ "$c" -le "$n" ]; then
         printf '%s' "${arr[$((c-1))]}"
@@ -3417,7 +3454,7 @@ ensure_deps() {
                 warn "  服务端可能无法启动"
             fi
         else
-            ask "  安装 openjdk-$jv ? [Y/n]: "; read -r y
+            ask "  安装 openjdk-$jv ? [Y/n]: "; rd y
             case "$y" in
                 n|N) warn "  跳过; 服务端可能无法启动";;
                 *) say "  正在安装 openjdk-$jv (体积较大, 请耐心)"
@@ -3440,7 +3477,7 @@ ensure_deps() {
         fi
     else
         echo -e "${Y}未安装${R}"
-        ask "  安装 python ? [Y/n]: "; read -r y
+        ask "  安装 python ? [Y/n]: "; rd y
         case "$y" in
             n|N) warn "  无 python3, 云端下载与许可证审计将不可用";;
             *) _pkg_do python || { err "  Python 安装失败"; return 1; };;
@@ -3458,7 +3495,7 @@ ensure_deps() {
 # ============================================================
 new_server() {
     title "新建服务器"
-    ask "服务器名称: "; read -r name
+    ask "服务器名称: "; rd name
     [ -z "$name" ] && return
     local sdir="${ROOT}/servers/${name}"
     mkdir -p "$sdir"
@@ -3466,17 +3503,17 @@ new_server() {
     echo
     echo "  1) 插件服  (Paper/Purpur/Folia/Velocity)"
     echo "  2) 模组服  (NeoForge/Fabric/Forge)"
-    ask "选择类型: "; read -r t
+    ask "选择类型: "; rd t
     local type loader mc
     if [ "$t" = "1" ]; then
         type=plugin
         echo "  加载器: paper / purpur / folia / velocity"
-        ask "选择: "; read -r loader
+        ask "选择: "; rd loader
         [ -z "$loader" ] && loader=paper
     else
         type=mod
         echo "  加载器: neoforge / fabric / forge"
-        ask "选择: "; read -r loader
+        ask "选择: "; rd loader
         [ -z "$loader" ] && loader=neoforge
     fi
 
@@ -3487,7 +3524,7 @@ new_server() {
 
     ensure_deps "$mc" || warn "依赖未就绪, 继续安装核心"
 
-    ask "内存 MB (默认1536): "; read -r mem
+    ask "内存 MB (默认1536): "; rd mem
     [ -z "$mem" ] && mem=1536
 
     echo "$mem" > "${HIST_DIR}/${name}.mem"
@@ -3522,7 +3559,7 @@ pick_server() {
     [ ${#list[@]} -eq 0 ] && { warn "还没有服务器, 请先新建"; press; return; }
     title "选择服务器"
     for s in "${list[@]}"; do echo "  $i) $s"; i=$((i+1)); done
-    ask "序号: "; read -r n
+    ask "序号: "; rd n
     local sel="${list[$((n-1))]}"
     [ -n "$sel" ] && { CUR="$sel"; save_conf; say "当前服务器: $CUR"; }
     press
@@ -3548,23 +3585,23 @@ settings() {
         echo "  12) 转圈速度      当前: $(case "${SPIN_SPEED:-fast}" in fast) echo 快;; normal) echo 标准;; slow) echo 慢;; esac)  (一圈 $(spin_circle)s)"
         echo "  13) 依赖自动安装  当前: $([ "${AUTO_DEPS:-1}" = 1 ] && echo 开 || echo 关)"
         echo "  0) 返回"
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         [ -z "$c" ] && continue
         case "$c" in
-        1) ask "新路径: "; read -r p; [ -n "$p" ] && { ROOT=$(eval echo "${p/#\~/$HOME}"); mkdir -p "$ROOT"; save_conf; };;
-        2) ask "次数: "; read -r p; [ -n "$p" ] && { MAX_RETRY=$p; save_conf; };;
-        3) ask "API地址: "; read -r p; [ -n "$p" ] && { MR_API=$p; save_conf; };;
+        1) ask "新路径: "; rd p; [ -n "$p" ] && { ROOT=$(eval echo "${p/#\~/$HOME}"); mkdir -p "$ROOT"; save_conf; };;
+        2) ask "次数: "; rd p; [ -n "$p" ] && { MAX_RETRY=$p; save_conf; };;
+        3) ask "API地址: "; rd p; [ -n "$p" ] && { MR_API=$p; save_conf; };;
         4) mirror_pick;;
-        5) ask "内存MB: "; read -r p; [ -n "$p" ] && [ -n "$CUR" ] && { echo "$p" > "${HIST_DIR}/${CUR}.mem"; say "已保存"; } || warn "先选服务器";;
+        5) ask "内存MB: "; rd p; [ -n "$p" ] && [ -n "$CUR" ] && { echo "$p" > "${HIST_DIR}/${CUR}.mem"; say "已保存"; } || warn "先选服务器";;
         6) if [ "$ANIM" = "1" ]; then ANIM=0; say "动效已关闭(启动更快)"; else ANIM=1; say "动效已开启"; fi; save_conf;;
         7) if [ "$LOGCOLOR" = "1" ]; then LOGCOLOR=0; say "服务器日志着色已关闭(原始输出, 延迟最低)"; else LOGCOLOR=1; say "服务器日志着色已开启"; fi; save_conf;;
         8) if [ "$STATBAR" = "1" ]; then STATBAR=0; say "底部状态栏已关闭"; else STATBAR=1; say "底部状态栏已开启"; fi; save_conf;;
         9) if [ "$SAVELOG" = "1" ]; then SAVELOG=0; say "不再保存运行日志"; else SAVELOG=1; say "运行日志将保存到 $LOGDIR"; fi; save_conf;;
-        10) ask "保留份数: "; read -r p; [ -n "$p" ] && { LOGKEEP=$p; save_conf; log_prune; say "已设为保留最近 $p 份"; };;
+        10) ask "保留份数: "; rd p; [ -n "$p" ] && { LOGKEEP=$p; save_conf; log_prune; say "已设为保留最近 $p 份"; };;
         11) if [ "${SPIN_STYLE:-16}" = "4" ]; then SPIN_STYLE=16; say "转圈样式: 平滑圆周 (16帧)"; else SPIN_STYLE=4; say "转圈样式: 经典 |/-\\ (4帧)"; fi; save_conf;;
         12) case "${SPIN_SPEED:-fast}" in fast) SPIN_SPEED=normal; say "转圈速度: 标准 (0.8s/圈)";; normal) SPIN_SPEED=slow; say "转圈速度: 慢 (1.6s/圈)";; *) SPIN_SPEED=fast; say "转圈速度: 快 (0.5s/圈)";; esac; BAR_CACHE=(); save_conf;;
         13) if [ "${AUTO_DEPS:-1}" = 1 ]; then AUTO_DEPS=0; say "依赖自动安装已关闭(缺依赖只提示)"; else AUTO_DEPS=1; say "依赖自动安装已开启(缺什么装什么)"; fi; save_conf;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -3717,12 +3754,12 @@ pm_ops_menu() {
         echo "   5) 修改 OP 等级"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1)
             title "OP 列表"
             if [ "$n" -eq 0 ]; then warn "还没有 OP"; press; continue; fi
-            pm_ops_list "$f" | while IFS=$'\t' read -r nm uu lv; do
+            pm_ops_list "$f" | while IFS=$'\t' rd nm uu lv; do
                 printf "  ${C}%-20s${R}  等级 ${Y}%s${R}\n" "$nm" "$lv"
             done
             echo
@@ -3738,17 +3775,17 @@ pm_ops_menu() {
             local sel; sel=$(pm_pick "$_tf") || { rm -f "$_tf"; continue; }
             rm -f "$_tf"
             [ -z "$sel" ] && { warn "没选"; press; continue; }
-            local lv; ask "OP 等级 (1-4, 直接回车=4): "; read -r lv
+            local lv; ask "OP 等级 (1-4, 直接回车=4): "; rd lv
             [ -z "$lv" ] && lv=4
-            { pm_ops_list "$f"; printf '%s\n' "$sel" | while IFS=$'\t' read -r nm uu; do
+            { pm_ops_list "$f"; printf '%s\n' "$sel" | while IFS=$'\t' rd nm uu; do
                 printf '%s\t%s\t%s\n' "$nm" "$uu" "$lv"; done
             } | python3 "$PM_PY" opswrite "$f" >/dev/null 2>&1
             say "已添加, OP 共 $(pm_ops_list "$f" 2>/dev/null | grep -c . || echo 0) 人"
             pm_reload_hint; press;;
         3)
-            ask "玩家名 (多个用空格隔开): "; read -r line
+            ask "玩家名 (多个用空格隔开): "; rd line
             [ -z "$line" ] && continue
-            local lv; ask "OP 等级 (1-4, 直接回车=4): "; read -r lv
+            local lv; ask "OP 等级 (1-4, 直接回车=4): "; rd lv
             [ -z "$lv" ] && lv=4
             { pm_ops_list "$f"
               for nm in $line; do
@@ -3783,12 +3820,12 @@ pm_ops_menu() {
             echo "   2) 等级 2  基础命令"
             echo "   3) 等级 3  大部分命令"
             echo "   4) 等级 4  全部 (含 /stop)"
-            ask "选择: "; read -r lv
+            ask "选择: "; rd lv
             case "$lv" in 1|2|3|4) ;; *) warn "无效"; press; continue;; esac
             python3 "$PM_PY" setlevel "$f" "$nm" "$lv" >/dev/null 2>&1
             say "已将 $nm 设为等级 $lv"
             pm_reload_hint; press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -3806,12 +3843,12 @@ pm_ban_menu() {
         echo "   4) 解封玩家"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1)
             title "封禁列表"
             [ "$n" -eq 0 ] && { warn "没有封禁的人"; press; continue; }
-            pm_ban_list "$f" name | while IFS=$'\t' read -r nm uu rs; do
+            pm_ban_list "$f" name | while IFS=$'\t' rd nm uu rs; do
                 printf "  ${RD}%-20s${R}  %s\n" "$nm" "${rs:-无理由}"
             done
             press;;
@@ -3824,17 +3861,17 @@ pm_ban_menu() {
             local sel; sel=$(pm_pick "$_tf") || { rm -f "$_tf"; continue; }
             rm -f "$_tf"
             [ -z "$sel" ] && { warn "没选"; press; continue; }
-            ask "封禁理由 (可留空): "; read -r rs
+            ask "封禁理由 (可留空): "; rd rs
             # 合并已有条目 + 新选的, 一次性重写
             { pm_ban_list "$f" name | cut -f1-3
-              printf '%s\n' "$sel" | while IFS=$'\t' read -r nm uu; do printf '%s\t%s\t%s\n' "$nm" "$uu" "$rs"; done; } \
+              printf '%s\n' "$sel" | while IFS=$'\t' rd nm uu; do printf '%s\t%s\t%s\n' "$nm" "$uu" "$rs"; done; } \
               | python3 "$PM_PY" banwrite "$f" name >/dev/null 2>&1
             say "已封禁, 共 $(pm_ban_list "$f" name 2>/dev/null | grep -c . || echo 0) 人"
             pm_reload_hint; press;;
         3)
-            ask "玩家名 (多个用空格隔开): "; read -r line
+            ask "玩家名 (多个用空格隔开): "; rd line
             [ -z "$line" ] && continue
-            ask "封禁理由 (可留空): "; read -r rs
+            ask "封禁理由 (可留空): "; rd rs
             for nm in $line; do
                 local uu; uu=$(wl_uuid "$nm")
                 printf '%s\t%s\t%s\n' "$nm" "$uu" "$rs"
@@ -3852,7 +3889,7 @@ pm_ban_menu() {
             eval python3 "$PM_PY" del "$f" name $args >/dev/null 2>&1
             say "已解封, 剩余 $(pm_ban_list "$f" name 2>/dev/null | grep -c . || echo 0) 人"
             pm_reload_hint; press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -3869,16 +3906,16 @@ pm_ip_menu() {
         echo "   3) 解封 IP"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1) title "IP 封禁列表"
            [ "$n" -eq 0 ] && { warn "没有封禁的 IP"; press; continue; }
-           pm_ban_list "$f" ip | while IFS=$'\t' read -r ip uu rs; do
+           pm_ban_list "$f" ip | while IFS=$'\t' rd ip uu rs; do
                printf "  ${RD}%-20s${R}  %s\n" "$ip" "${rs:-无理由}"; done
            press;;
-        2) ask "要封禁的 IP: "; read -r ip
+        2) ask "要封禁的 IP: "; rd ip
            [ -z "$ip" ] && continue
-           ask "理由 (可留空): "; read -r rs
+           ask "理由 (可留空): "; rd rs
            printf '%s\t%s\n' "$ip" "$rs" | python3 "$PM_PY" banwrite "$f" ip >/dev/null 2>&1
            say "已封禁 $ip"
            pm_reload_hint; press;;
@@ -3891,7 +3928,7 @@ pm_ip_menu() {
            local args=""; while read -r ip; do args="$args \"$ip\""; done <<< "$sel"
            eval python3 "$PM_PY" del "$f" ip $args >/dev/null 2>&1
            say "已解封"; pm_reload_hint; press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -3913,13 +3950,13 @@ pm_menu() {
         echo
         echo -e "  ${Y}OP 等级说明:${R} 1=绕过出生点保护 2=基础命令 3=大部分命令 ${C}4=全部${R}"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1) pm_ops_menu;;
         2) pm_ban_menu;;
         3) pm_ip_menu;;
         4) wl_menu;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -3950,7 +3987,7 @@ sc_install_cron() {
         echo -e "  ${Y}执行:${R} crond &"
         echo -e "  ${Y}每次重启 Termux / 手机后都要重新执行一次${R}"
         echo
-        ask "现在帮你启动 crond? (Y/n): "; read -r k
+        ask "现在帮你启动 crond? (Y/n): "; rd k
         case "$k" in n|N) ;; *) ( crond >/dev/null 2>&1 & ) ; sleep 1
             pgrep -x crond >/dev/null 2>&1 && say "crond 已启动" || warn "启动失败";; esac
     fi
@@ -4009,7 +4046,7 @@ sc_set_time() {   # $1=start|stop
     echo "   5) 01:00      凌晨关"
     echo "   6) 04:00      凌晨关(适合通宵服)"
     echo
-    ask "时间或序号: "; read -r v
+    ask "时间或序号: "; rd v
     case "$v" in
         1) v="08:00";; 2) v="13:00";; 3) v="18:00";;
         4) v="23:30";; 5) v="01:00";; 6) v="04:00";;
@@ -4071,7 +4108,7 @@ sc_menu() {
         echo "   7) 查看状态"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1) sc_set_time start;;
         2) sc_set_time stop;;
@@ -4085,7 +4122,7 @@ sc_menu() {
         5) sc_install_cron && press;;
         6) sc_clear; rm -f "$SC_ON_FILE";;
         7) sc_status;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -4304,18 +4341,18 @@ guard_menu() {
         echo
         echo -e "  ${Y}说明:${R} 守护随开服自动起, 停服自动关; 手机需先开唤醒锁(菜单18)"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1) if wd_on; then rm -f "$WD_FILE"; say "看门狗已关闭";
            else printf '1' > "$WD_FILE"; say "看门狗已开启 (崩了自动拉起)"; fi; press;;
-        2) ask "连续崩溃几次就放弃? (1-10): "; read -r n
+        2) ask "连续崩溃几次就放弃? (1-10): "; rd n
            case "$n" in
              [1-9]|10) printf '%s' "$n" > "$WD_MAX_FILE"; say "已设为 $n 次";;
              *) warn "只能是 1-10";;
            esac; press;;
         3) if tbk_on; then rm -f "$TBK_FILE"; say "定时备份已关闭";
            else printf '1' > "$TBK_FILE"; say "定时备份已开启"; fi; press;;
-        4) ask "每隔多少分钟备份一次? (≥5): "; read -r n
+        4) ask "每隔多少分钟备份一次? (≥5): "; rd n
            case "$n" in
              ''|*[!0-9]*) warn "请输入数字";;
              *) if [ "$n" -lt 5 ]; then warn "最少 5 分钟"; else printf '%s' "$n" > "$TBK_MIN_FILE"; say "已设为每 $n 分钟"; fi;;
@@ -4327,7 +4364,7 @@ guard_menu() {
                title "守护日志 (末尾 30 行)"
                tail -n 30 "$GUARD_LOG"
            else warn "还没有守护日志"; fi; press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -4350,7 +4387,7 @@ sp_list() {
         i=$((i+1))
     done
     echo
-    ask "序号可看详情(直接回车返回): "; read -r n
+    ask "序号可看详情(直接回车返回): "; rd n
     [ -z "$n" ] && return
     [[ ! "$n" =~ ^[0-9]+$ ]] && return
     { [ "$n" -lt 1 ] || [ "$n" -gt "${#fs[@]}" ]; } && return
@@ -4378,7 +4415,7 @@ sp_restore() {
     echo
     echo "  0) 取消"
     echo
-    ask "选择要恢复的备份: "; read -r n
+    ask "选择要恢复的备份: "; rd n
     [ -z "$n" ] && return
     [ "$n" = "0" ] && return
     [[ ! "$n" =~ ^[0-9]+$ ]] && return
@@ -4397,7 +4434,7 @@ sp_restore() {
     echo -e "  ${C}$(basename "$f")${R}"
     echo
     echo -e "  ${Y}当前世界会先自动存一份, 后悔了还能再回滚${R}"
-    ask "确认恢复? (y/N): "; read -r k
+    ask "确认恢复? (y/N): "; rd k
     case "$k" in y|Y) ;; *) say "已取消"; press; return;; esac
 
     echo -ne "  ${Y}正在备份当前世界...${R}"
@@ -4482,17 +4519,17 @@ sp_menu() {
         echo "   7) 定时开关服 (每天自动开/关)"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1) sp_flush; sp_do_backup; press;;
         2) if sp_autobk; then rm -f "$AUTO_BK_FILE"; say "已关闭自动备份";
            else printf '1' > "$AUTO_BK_FILE"; say "已开启: 每次启动服务器前自动备份"; fi;;
-        3) ask "保留份数: "; read -r n; [ -n "$n" ] && { printf '%s' "$n" > "$AUTOBK_KEEP_FILE"; sp_prune; say "已设为保留最近 $n 份"; };;
+        3) ask "保留份数: "; rd n; [ -n "$n" ] && { printf '%s' "$n" > "$AUTOBK_KEEP_FILE"; sp_prune; say "已设为保留最近 $n 份"; };;
         4) sp_list;;
         5) sp_restore;;
         6) sp_check;;
         7) sc_menu;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -4646,11 +4683,11 @@ bk_pick_pkg() {   # -> 输出包名
     echo -e "  ${C}m)${R} 手动输入包名"
     echo "  0) 返回"
     echo
-    ask "选择: "; read -r sel
+    ask "选择: "; rd sel
     [ -z "$sel" ] && return 1
     [ "$sel" = "0" ] && return 1
     if [ "$sel" = "m" ]; then
-        ask "包名: "; read -r sel
+        ask "包名: "; rd sel
         [ -z "$sel" ] && return 1
         printf '%s' "$sel"; return 0
     fi
@@ -4753,7 +4790,7 @@ bk_menu() {
         echo "   7) 保活自检"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
         1) bk_lock;;
         2) bk_unlock;;
@@ -4763,7 +4800,7 @@ bk_menu() {
         5) bk_open_detail;;
         6) bk_am "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS" && { say "已打开电池优化总页"; press; };;
         7) bk_check;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -4997,7 +5034,7 @@ stop_server() {
     echo "   2) 强制杀死 (SIGKILL, 可能丢档)"
     echo "   0) 取消"
     echo
-    ask "选择: "; read -r k
+    ask "选择: "; rd k
     case "$k" in
     1) for p in $pids; do kill -TERM "$p" 2>/dev/null; done
        local i=0 secs2=0 ss2; ss2=$(date +%s)
@@ -5223,7 +5260,7 @@ wl_menu() {
         echo "   8) 清空白名单"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         [ -z "$c" ] && continue
         case "$c" in
         1) touch "$sdir/server.properties"
@@ -5244,7 +5281,7 @@ wl_menu() {
                done < <(wl_list "$wl")
            fi
            press;;
-        4) ask "玩家名(多个用空格隔开): "; read -r names
+        4) ask "玩家名(多个用空格隔开): "; rd names
            if [ -z "$names" ]; then press; continue; fi
            local tmpf="${TMP_DIR}/wl.$$"; : > "$tmpf"
            wl_list "$wl" >> "$tmpf" 2>/dev/null
@@ -5284,7 +5321,7 @@ wl_menu() {
                i=$((i+1))
            done
            echo; echo -e "  ${Y}支持: 1 3  或  2-5  或  all${R}"
-           ask "序号: "; read -r sel
+           ask "序号: "; rd sel
            [ -z "$sel" ] && continue
            local tmpf2="${TMP_DIR}/wl2.$$"; : > "$tmpf2"
            wl_list "$wl" >> "$tmpf2" 2>/dev/null
@@ -5313,7 +5350,7 @@ wl_menu() {
                i2=$((i2+1))
            done
            echo; echo -e "  ${Y}支持: 1 3  或  2-5  或  all${R}"
-           ask "序号: "; read -r sel2
+           ask "序号: "; rd sel2
            [ -z "$sel2" ] && continue
            local tmpf3="${TMP_DIR}/wl3.$$"; : > "$tmpf3"
            wl_list "$wl" >> "$tmpf3" 2>/dev/null
@@ -5341,7 +5378,7 @@ wl_menu() {
                i3=$((i3+1))
            done < <(wl_list "$wl")
            echo; echo -e "  ${Y}支持: 1 3  或  2-5  或  all${R}"
-           ask "要删除的序号: "; read -r sel3
+           ask "要删除的序号: "; rd sel3
            [ -z "$sel3" ] && continue
            local dellist; dellist=$(sel_expand "$sel3" "$n")
            [ -z "$dellist" ] && { warn "没有有效序号"; press; continue; }
@@ -5358,11 +5395,11 @@ wl_menu() {
            say "已删除, 白名单剩余 ${cnt4} 人"
            mc_running && warn "服务器运行中, 需在游戏里执行: /whitelist reload"
            press;;
-        8) ask "确认清空白名单? (y/N): "; read -r k8
+        8) ask "确认清空白名单? (y/N): "; rd k8
            case "$k8" in y|Y) printf '[]' > "$wl"; say "已清空";; esac
            mc_running && warn "服务器运行中, 需在游戏里执行: /whitelist reload"
            press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -5556,7 +5593,7 @@ prop_edit_cat() {
         echo
         echo "   0) 返回"
         echo
-        ask "序号 (回车返回): "; read -r sel
+        ask "序号 (回车返回): "; rd sel
         [ -z "$sel" ] && return
         [ "$sel" = "0" ] && return
         [[ ! "$sel" =~ ^[0-9]+$ ]] && continue
@@ -5580,7 +5617,7 @@ prop_edit_cat() {
             [ "$cur" = "true" ]  && echo -e "  ${C}1)${R} 开启   ${G}← 当前${R}" || echo "  1) 开启"
             [ "$cur" = "false" ] && echo -e "  ${C}2)${R} 关闭   ${G}← 当前${R}" || echo "  2) 关闭"
             echo
-            ask "选择 (1 开启 / 2 关闭): "; read -r nv
+            ask "选择 (1 开启 / 2 关闭): "; rd nv
             case "$nv" in
                 1|开|开启|是|y|Y|true)  nv="true";;
                 2|关|关闭|否|n|N|false) nv="false";;
@@ -5601,7 +5638,7 @@ prop_edit_cat() {
                 idx=$((idx+1))
             done
             echo
-            ask "选择 (1-${#_opts[@]}): "; read -r nv
+            ask "选择 (1-${#_opts[@]}): "; rd nv
             if [[ "$nv" =~ ^[0-9]+$ ]] && [ "$nv" -ge 1 ] && [ "$nv" -le "${#_opts[@]}" ]; then
                 opt="${_opts[$((nv-1))]}"
                 IFS='=' read -r lab val <<< "$opt"
@@ -5627,9 +5664,9 @@ prop_edit_cat() {
                 done
                 echo -e "  ${C}0)${R} 手动输入其它数字"
                 echo
-                ask "选择 (1-${#_opts[@]}, 0 手输): "; read -r nv
+                ask "选择 (1-${#_opts[@]}, 0 手输): "; rd nv
                 if [ "$nv" = "0" ]; then
-                    ask "输入数字: "; read -r nv
+                    ask "输入数字: "; rd nv
                     [[ ! "$nv" =~ ^-?[0-9]+$ ]] && { warn "要填数字"; press; continue; }
                 elif [[ "$nv" =~ ^[0-9]+$ ]] && [ "$nv" -ge 1 ] && [ "$nv" -le "${#_opts[@]}" ]; then
                     opt="${_opts[$((nv-1))]}"
@@ -5640,7 +5677,7 @@ prop_edit_cat() {
                     warn "填 1 到 ${#_opts[@]} 之间的数字"; press; continue
                 fi
             else
-                ask "输入数字: "; read -r nv
+                ask "输入数字: "; rd nv
                 [ -z "$nv" ] && continue
                 [[ ! "$nv" =~ ^-?[0-9]+$ ]] && { warn "要填数字"; press; continue; }
             fi;;
@@ -5653,9 +5690,9 @@ prop_edit_cat() {
             case "$k" in
             server-ip) echo -e "  ${Y}直接回车 = 留空 (组网联机必须留空)${R}";;
             esac
-            ask "输入内容 (直接回车=清空/留空): "; read -r nv
+            ask "输入内容 (直接回车=清空/留空): "; rd nv
             if [ -z "$nv" ]; then
-                ask "确定清空此项? (y/N): "; read -r cf
+                ask "确定清空此项? (y/N): "; rd cf
                 case "$cf" in y|Y) nv="";; *) continue;; esac
             fi;;
         esac
@@ -5688,7 +5725,7 @@ prop_seed_menu() {
         echo "   5) 用当前世界的种子"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r sc || return
+        ask "选择: "; rd sc || return
         case "$sc" in
         1) local r1; r1=$(( (RANDOM << 17) ^ (RANDOM << 3) ^ RANDOM ))
            [ "$r1" = "0" ] && r1=1
@@ -5696,18 +5733,18 @@ prop_seed_menu() {
            say "已设为随机种子: $r1"
            warn "改种子只对【新建世界】生效; 已有世界需删除旧存档才会重生成"
            press; return;;
-        2) ask "输入种子数字: "; read -r sv
+        2) ask "输入种子数字: "; rd sv
            [ -z "$sv" ] && continue
            prop_set level-seed "$sv" "$f"
            say "已设为: $sv"
            warn "改种子只对【新建世界】生效; 已有世界需删除旧存档才会重生成"
            press; return;;
-        3) ask "输入文字: "; read -r st
+        3) ask "输入文字: "; rd st
            [ -z "$st" ] && continue
            local hv; hv=$(wt_hash "$st")
            if [ -n "$hv" ]; then
                echo -e "  ${Y}「$st」→ 种子 ${C}$hv${R}"
-               ask "用这个? (Y/n): "; read -r ok
+               ask "用这个? (Y/n): "; rd ok
                case "$ok" in n|N) continue;; esac
                prop_set level-seed "$hv" "$f"
                say "已设为: $hv (等价输入文字「$st」)"
@@ -5731,7 +5768,7 @@ prop_seed_menu() {
                err "当前世界还没生成过 (无 level.dat)"
            fi
            press; return;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -5749,7 +5786,7 @@ prop_preset() {
         echo "   5) 原版默认 (恢复官方初始值)"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r k
+        ask "选择: "; rd k
         case "$k" in
         1) prop_set view-distance 6 "$f"; prop_set simulation-distance 4 "$f"
            prop_set network-compression-threshold 512 "$f"
@@ -5773,7 +5810,7 @@ prop_preset() {
                [ -n "$vv2" ] && prop_set "$kk2" "$vv2" "$f"
            done
            say "已恢复官方默认"; press;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -5803,7 +5840,7 @@ prop_menu() {
         echo "   9) 服务器图标 / 简介 (MOTD)"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c
+        ask "选择: "; rd c
         case "$c" in
         1) while true; do
                clear 2>/dev/null
@@ -5820,29 +5857,29 @@ prop_menu() {
                echo " 10) 远程管理 (7项) RCON / Query / JMX"
                echo "  0) 返回"
                echo
-               ask "分类 (1-10): "; read -r cc
+               ask "分类 (1-10): "; rd cc
                case "$cc" in
                1) prop_edit_cat "$f" 连接;;     2) prop_edit_cat "$f" 网络;;
                3) prop_edit_cat "$f" 性能;;     4) prop_edit_cat "$f" 世界生成;;
                5) prop_edit_cat "$f" 世界规则;; 6) prop_edit_cat "$f" 模式刷怪;;
                7) prop_edit_cat "$f" 权限安全;; 8) prop_edit_cat "$f" 聊天外观;;
                9) prop_edit_cat "$f" 数据包资源;; 10) prop_edit_cat "$f" 远程管理;;
-               0) break;;
+               0|q|Q) break;;
                esac
            done;;
         2) prop_preset "$f";;
-        3) echo; ask "key 名: "; read -r kk
+        3) echo; ask "key 名: "; rd kk
            [ -n "$kk" ] && {
                if [ "$kk" = "level-seed" ]; then prop_seed_menu "$f"; press; continue; fi
                echo -e "  当前: ${G}$(prop_get "$kk" "$f")${R}"
-               ask "新值: "; read -r vv
+               ask "新值: "; rd vv
                [ -n "$vv" ] && { prop_set "$kk" "$vv" "$f"; say "已写入 $kk=$vv"; }
            }
            press;;
-        4) echo; ask "key 名: "; read -r kk; ask "值: "; read -r vv
+        4) echo; ask "key 名: "; rd kk; ask "值: "; rd vv
            [ -n "$kk" ] && { prop_set "$kk" "$vv" "$f"; say "已添加 $kk=$vv"; }
            press;;
-        5) echo; ask "要删的 key 名: "; read -r kk
+        5) echo; ask "要删的 key 名: "; rd kk
            [ -n "$kk" ] && { prop_del "$kk" "$f"; say "已删除 $kk"; }
            press;;
         6) clear 2>/dev/null; echo; cat "$f" 2>/dev/null | sed 's/^/  /'; echo; press;;
@@ -5851,7 +5888,7 @@ prop_menu() {
            cp "$f" "$bk" && say "已备份: $bk"
            press;;
         9) icon_menu;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -5894,7 +5931,7 @@ start_bg() {
     [ -f server.jar ] || [ -f run.sh ] || { err "未找到 server.jar"; press; return; }
     if [ ! -f eula.txt ] || ! grep -q 'eula=true' eula.txt 2>/dev/null; then
         { warn "eula.txt 未同意, 服务端会立刻退出"; } 
-        ask "现在自动写入 eula=true? (Y/n): "; read -r _e
+        ask "现在自动写入 eula=true? (Y/n): "; rd _e
         case "$_e" in n|N) press; return;; esac
         echo "eula=true" > eula.txt
         say "已写入 eula.txt"
@@ -6106,11 +6143,11 @@ start_choose() {
         echo
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r k
+        ask "选择: "; rd k
         case "$k" in
         1) frp_boot_if_needed; start_server "$sdir"; return;;
         2) frp_boot_if_needed; start_bg "$sdir"; return;;
-        0) return;;
+        0|q|Q) return;;
         esac
     done
 }
@@ -6282,7 +6319,7 @@ frp_export_menu() {
     [ "$n" -eq 0 ] && { warn "没有节点"; press; return; }
     frp_list
     echo
-    ask "导出哪个 (序号, all=全部): "; read -r c
+    ask "导出哪个 (序号, all=全部): "; rd c
     local i
     if [ "$c" = "all" ]; then
         for ((i=1;i<=n;i++)); do frp_export_one "$i"; done
@@ -6328,7 +6365,7 @@ frp_import_menu() {
         i=$((i+1))
     done
     echo
-    ask "导入哪个 (序号, all=全部): "; read -r c
+    ask "导入哪个 (序号, all=全部): "; rd c
     local toadd
     if [ "$c" = "all" ]; then toadd=$(seq 1 "${#FS[@]}"); else toadd="$c"; fi
     local k
@@ -6441,7 +6478,7 @@ frp_test_menu() {
     [ "$n" -eq 0 ] && { warn "没有节点"; press; return; }
     frp_list
     echo
-    ask "测哪个 (序号, all=全部): "; read -r c
+    ask "测哪个 (序号, all=全部): "; rd c
     if [ "$c" = "all" ]; then
         local i; for ((i=1;i<=n;i++)); do frp_test_one "$i"; done
     else
@@ -6479,32 +6516,32 @@ frp_add() {
     echo
     echo -e "  ${B}快捷取名 (直接回车也行):${R}"
     echo "   1) 北京  2) 中国香港  3) 洛杉矶  4) 凉州  5) 自定义"
-    ask "节点名 (1-5 或自己打): "; read -r nm
+    ask "节点名 (1-5 或自己打): "; rd nm
     case "$nm" in
         1) nm="北京";; 2) nm="中国香港";; 3) nm="洛杉矶";; 4) nm="凉州";;
         5) nm="";;
         *) ;;
     esac
-    [ -z "$nm" ] && { ask "节点名: "; read -r nm; }
+    [ -z "$nm" ] && { ask "节点名: "; rd nm; }
     [ -z "$nm" ] && nm="节点"
 
     local addr port auth tok user remote lport on
-    ask "服务器地址 (域名或IP): "; read -r addr
+    ask "服务器地址 (域名或IP): "; rd addr
     [ -z "$addr" ] && { err "地址不能为空"; press; return; }
-    ask "服务器端口 [7000]: "; read -r port; [ -z "$port" ] && port=7000
+    ask "服务器端口 [7000]: "; rd port; [ -z "$port" ] && port=7000
     echo "   鉴权: 1) token/密钥   2) user+密钥 (樱花FRP 那种)"
-    ask "选择 (1/2): "; read -r auth
+    ask "选择 (1/2): "; rd auth
     if [ "$auth" = "2" ]; then
         auth=user
-        ask "user (访问密钥): "; read -r user
-        ask "meta_token (隧道密钥): "; read -r tok
+        ask "user (访问密钥): "; rd user
+        ask "meta_token (隧道密钥): "; rd tok
     else
         auth=token; user=""
-        ask "token (可留空): "; read -r tok
+        ask "token (可留空): "; rd tok
     fi
-    ask "公网端口 (朋友连的): "; read -r remote
+    ask "公网端口 (朋友连的): "; rd remote
     [ -z "$remote" ] && remote=25565
-    ask "本机 MC 端口 [${FRP_LOCAL_DEFAULT}]: "; read -r lport
+    ask "本机 MC 端口 [${FRP_LOCAL_DEFAULT}]: "; rd lport
     [ -z "$lport" ] && lport="$FRP_LOCAL_DEFAULT"
     on=1
 
@@ -6514,7 +6551,7 @@ frp_add() {
     say "已添加 ${nm}  (第 $i 号)"
     echo -e "  朋友填: ${G}${addr}:${remote}${R}"
     echo
-    ask "顺便导出一份到 frtt 方便以后改? (y/n): "; read -r v
+    ask "顺便导出一份到 frtt 方便以后改? (y/n): "; rd v
     [ "$v" = "y" ] && frp_export_one "$i"
     press
 }
@@ -6524,7 +6561,7 @@ frp_edit() {
     local n; n=$(frp_cnt)
     [ "$n" -eq 0 ] && { warn "没有节点"; press; return; }
     frp_list
-    ask "编辑哪个 (序号): "; read -r i
+    ask "编辑哪个 (序号): "; rd i
     case "$i" in ''|*[!0-9]*) return;; esac
     [ "$i" -lt 1 ] || [ "$i" -gt "$n" ] && { warn "没这个序号"; press; return; }
     frp_parse "$i"
@@ -6541,16 +6578,16 @@ frp_edit() {
     fi
     echo -e "  ${C}直接回车 = 保持原样${R}"
     local v
-    ask "节点名 [${N_NAME}]: "; read -r v; [ -n "$v" ] && N_NAME="$v"
-    ask "地址 [${N_ADDR}]: "; read -r v; [ -n "$v" ] && N_ADDR="$v"
-    ask "端口 [${N_PORT}]: "; read -r v; [ -n "$v" ] && N_PORT="$v"
-    ask "公网端口 [${N_REMOTE}]: "; read -r v; [ -n "$v" ] && N_REMOTE="$v"
-    ask "本机端口 [${N_LOCAL}]: "; read -r v; [ -n "$v" ] && N_LOCAL="$v"
-    ask "token [${N_TOK}]: "; read -r v; [ -n "$v" ] && N_TOK="$v"
+    ask "节点名 [${N_NAME}]: "; rd v; [ -n "$v" ] && N_NAME="$v"
+    ask "地址 [${N_ADDR}]: "; rd v; [ -n "$v" ] && N_ADDR="$v"
+    ask "端口 [${N_PORT}]: "; rd v; [ -n "$v" ] && N_PORT="$v"
+    ask "公网端口 [${N_REMOTE}]: "; rd v; [ -n "$v" ] && N_REMOTE="$v"
+    ask "本机端口 [${N_LOCAL}]: "; rd v; [ -n "$v" ] && N_LOCAL="$v"
+    ask "token [${N_TOK}]: "; rd v; [ -n "$v" ] && N_TOK="$v"
     frp_write_line "$i" "${N_NAME}|${N_ADDR}|${N_PORT}|${N_AUTH}|${N_TOK}|${N_USER}|${N_REMOTE}|${N_LOCAL}|${N_ON}"
     say "已保存"
     if frp_npid "$i" >/dev/null; then
-        ask "配置变了, 重启这个节点? (y/n): "; read -r v
+        ask "配置变了, 重启这个节点? (y/n): "; rd v
         [ "$v" = "y" ] && { frp_stop_one "$i"; frp_start_one "$i"; }
     fi
     press
@@ -6561,7 +6598,7 @@ frp_toggle() {
     local n; n=$(frp_cnt)
     [ "$n" -eq 0 ] && { warn "没有节点"; press; return; }
     frp_list
-    ask "切换哪个 (序号): "; read -r i
+    ask "切换哪个 (序号): "; rd i
     case "$i" in ''|*[!0-9]*) return;; esac
     frp_parse "$i" || return
     if [ "$N_ON" = 1 ]; then N_ON=0; else N_ON=1; fi
@@ -6585,7 +6622,7 @@ frp_del() {
     local n; n=$(frp_cnt)
     [ "$n" -eq 0 ] && { warn "没有节点"; press; return; }
     frp_list
-    ask "删除哪个 (序号): "; read -r i
+    ask "删除哪个 (序号): "; rd i
     case "$i" in ''|*[!0-9]*) return;; esac
     [ "$i" -ge 1 ] && [ "$i" -le "$n" ] || { warn "没这个序号"; press; return; }
     frp_parse "$i" || return
@@ -6706,12 +6743,42 @@ frp_download() {
         "https://github.com/fatedier/frp/releases/download/${ver}/${name}.tar.gz"
         "https://ghproxy.net/https://github.com/fatedier/frp/releases/download/${ver}/${name}.tar.gz"
         "https://gh-proxy.com/https://github.com/fatedier/frp/releases/download/${ver}/${name}.tar.gz"
+        "https://mirror.ghproxy.com/https://github.com/fatedier/frp/releases/download/${ver}/${name}.tar.gz"
     )
     mkdir -p "$FRP_DIR"
-    local tmp="$FRP_DIR/dl.tar.gz" ok=""
+    # 依赖自动补齐: 没 curl 就先装, 不然下面全是"下载失败"的假象
+    if ! command -v curl >/dev/null 2>&1; then
+        echo -e "  ${Y}[!]${R} 检测到缺少 ${C}curl${R}"
+        echo -e "      ${Y}正在自动安装...${R}"
+        if _pkg_do curl; then
+            echo -e "      ${G}✔${R} curl 就绪, 开始下载"
+        else
+            err "curl 装不上, 无法联网下载; 可用菜单里的本地打包包装"
+            return 1
+        fi
+    fi
+    # 缺解压工具也补一下, 否则下完了解不开
+    command -v tar >/dev/null 2>&1 || _pkg_do tar >/dev/null 2>&1
+    local tmp="$FRP_DIR/dl.tar.gz" ok="" why=""
     for u in "${urls[@]}"; do
+        [ -z "$u" ] && continue
         echo -e "  ${C}尝试:${R} ${u##*/}"
-        if curl -fsSL --connect-timeout 20 --max-time 180 "$u" -o "$tmp" 2>/dev/null && [ -s "$tmp" ]; then ok="$u"; break; fi
+        rm -f "$tmp" 2>/dev/null
+        # speed-limit/16K + speed-time 15: 15 秒低于 16KB/s 判定卡死, 立刻换源
+        # 不加这个, 一个死源能干等到 180 秒超时, 看着像"卡住了"
+        if curl -fsSL --connect-timeout 10 --max-time 180 \
+             --speed-limit 16384 --speed-time 15 \
+             "$u" -o "$tmp" 2>/dev/null; then
+            if [ -s "$tmp" ]; then ok="$u"; break; fi
+            why="空文件"
+        else
+            case "$?" in
+                28) why="超时/速度过低" ;;
+                22) why="源返回 4xx/5xx" ;;
+                *)  why="连接失败" ;;
+            esac
+        fi
+        echo -e "      ${RD}✘${R} ${why}, 自动切换下一个源..."
     done
 
     # ---------- 网速下不动 -> 用本地打包好的文件 ----------
@@ -6765,7 +6832,7 @@ frp_log_menu() {
     local n; n=$(frp_cnt)
     [ "$n" -eq 0 ] && { warn "没有节点"; press; return; }
     frp_list
-    ask "看哪个 (序号): "; read -r i
+    ask "看哪个 (序号): "; rd i
     case "$i" in ''|*[!0-9]*) return;; esac
     clear 2>/dev/null
     frp_parse "$i" || return
@@ -6810,7 +6877,7 @@ frp_sync() {
 frp_sync_now() {
     if [ "${FRP_AUTOSYNC:-1}" != 1 ]; then
         warn "自动识别已关闭"
-        ask "临时扫一次? (y/n): "; read -r v
+        ask "临时扫一次? (y/n): "; rd v
         [ "$v" != "y" ] && { press; return; }
     fi
     local n; n=$(frp_sync 0)
@@ -6883,14 +6950,14 @@ frp_menu() {
         echo "  16) 用本地打包包装 frpc (不走网络)"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
             1) frp_add;;
             2) frp_edit;;
             3) frp_toggle;;
             4) frp_del;;
-            5) frp_list; ask "启动哪个: "; read -r i; case "$i" in ''|*[!0-9]*) ;; *) frp_start_one "$i";; esac; press;;
-            6) frp_list; ask "停止哪个: "; read -r i; case "$i" in ''|*[!0-9]*) ;; *) frp_stop_one "$i";; esac; press;;
+            5) frp_list; ask "启动哪个: "; rd i; case "$i" in ''|*[!0-9]*) ;; *) frp_start_one "$i";; esac; press;;
+            6) frp_list; ask "停止哪个: "; rd i; case "$i" in ''|*[!0-9]*) ;; *) frp_stop_one "$i";; esac; press;;
             7) frp_start_all;;
             8) frp_stop_all;;
             9) frp_test_menu;;
@@ -6907,7 +6974,7 @@ frp_menu() {
                frp_set_auto
                say "已设为 $([ "$FRP_AUTOSTART" = 1 ] && echo 开 || echo 关)"; press;;
             16) frp_install_local; press;;
-            0) return;;
+            0|q|Q) return;;
         esac
     done
 }
@@ -7239,7 +7306,7 @@ perm_ensure() {
     if [ $rc -ne 0 ] && [ "${PERM_BATCH:-0}" != 1 ]; then
         echo
         ask "这项以后不再提示? (y=跳过 / 回车=下次再说): "
-        read -r _ps
+        rd _ps
         case "$_ps" in y|Y) perm_do_skip "$name"; return 2;; esac
     fi
     return $rc
@@ -7270,10 +7337,10 @@ perm_hub() {
         echo
         echo -e "  ${B} 0)${R} 返回"
         echo
-        ask "序号: "; read -r c || return
+        ask "序号: "; rd c || return
         [ -z "$c" ] && continue
         case "$c" in
-            0) return;;
+            0|q|Q) return;;
             d|D) clear 2>/dev/null; perm_probe; press; continue;;
             s|S) clear 2>/dev/null; perm_skip_menu; continue;;
             all|ALL|a|A)
@@ -7315,7 +7382,7 @@ perm_skip_menu() {
             [ -n "$n" ] && echo -e "     ${C}$n${R}  ${Y}($(perm_name "$n"))${R}"
         done < "$PERM_SKIP_FILE"
         echo
-        ask "清空名单? (y/n): "; read -r y
+        ask "清空名单? (y/n): "; rd y
         case "$y" in y|Y) perm_unskip_all;; esac
     fi
     press
@@ -7589,7 +7656,7 @@ ann_show() {
         echo -e "  ${bc}├───────────────────────────────────┤${R}"
     fi
     local total; total=$(ann_total)
-    ann_body | head -n "$ANN_MAX_LINE" | while IFS= read -r line; do
+    ann_body | head -n "$ANN_MAX_LINE" | while IFS= rd line; do
         if [ -z "$line" ]; then echo -e "  ${bc}│${R}"
         else echo -e "  ${bc}│${R} $line"; fi
     done
@@ -7775,7 +7842,7 @@ ann_seturl() {
     echo -e "  ${Y}内置源:${R} ${C}${ANN_DEFAULT_URL}${R}"
     echo
     ask "新地址 (回车=不改, d=恢复内置源): "
-    read -r u
+    rd u
     case "$u" in
         "") ;;
         d|D) ANN_URL="$ANN_DEFAULT_URL"; say "已恢复内置源"; save_conf;;
@@ -7807,7 +7874,7 @@ ann_menu() {
         echo "   7) 清空缓存               d) 恢复内置源"
         echo "   0) 返回"
         echo
-        ask "选择: "; read -r c || return
+        ask "选择: "; rd c || return
         case "$c" in
             1) clear 2>/dev/null; title "公告全文"; ann_show || true
                if [ -s "$ANN_CACHE" ]; then echo; ann_body; fi
@@ -7830,10 +7897,10 @@ ann_menu() {
                echo -e "  ${C}2)${R} 按小时缓存 ${Y}(可能错过新公告)${R}"
                echo -e "     到点才去问一次。你中途改了公告, 别人要等满这个时长才看得到。"
                echo
-               ask "选择 (1/2, 直接回车=1): "; read -r m
+               ask "选择 (1/2, 直接回车=1): "; rd m
                case "$m" in
                    2) ANN_ALWAYS=0; save_conf
-                      ask "缓存小时数 (1-168): "; read -r h
+                      ask "缓存小时数 (1-168): "; rd h
                       case "$h" in ''|*[!0-9]*) ;;
                           *) [ "$h" -ge 1 ] && [ "$h" -le 168 ] && { ANN_TTL="$h"; save_conf; say "已设为 ${h} 小时"; };; esac
                       say "已切到按小时模式 (${ANN_TTL:-6}h)";;
@@ -7844,7 +7911,7 @@ ann_menu() {
             7) rm -f "$ANN_CACHE" "$ANN_TSF" 2>/dev/null; say "缓存已清空"; press;;
             d|D) ANN_URL="$ANN_DEFAULT_URL"; ANN_ON=1; save_conf
                  say "已恢复内置源: ${ANN_DEFAULT_URL}"; press;;
-            0) return;;
+            0|q|Q) return;;
         esac
     done
 }
@@ -7857,7 +7924,7 @@ _meta_or_ask() {
     warn "这个服缺少核心信息 (meta 不全)"
     [ -z "${MM_L:-}" ] && {
         echo -e "  ${C}加载器:${R} neoforge / fabric / forge / paper / purpur / folia"
-        ask "选一个: "; read -r MM_L
+        ask "选一个: "; rd MM_L
     }
     [ -n "$MM_L" ] && [ -z "${MM_M:-}" ] && MM_M=$(pick_mc_version "$MM_L")
     [ -z "${MM_T:-}" ] && case "$MM_L" in
@@ -7911,13 +7978,13 @@ main_menu() {
         echo "  25) 一键自检 (环境问题全查)"
         echo "  26) 安卓权限中心 (root/Shizuku/弹窗)"
         echo "  27) 云端公告 (启动时拉取)"
-        echo "   0) 退出"
+        echo "   0) 退出   ${C}(任何时候也能直接按 q 退出)${R}"
         bg_status_line
         guard_status_line
         frp_status_line
         echo
         ask "选择: "
-        read -r c || exit 0
+        rd c || exit 0
         [ -z "$c" ] && continue
 
         local sdir="${ROOT}/servers/${CUR}"
@@ -7951,7 +8018,7 @@ main_menu() {
         25) do_diag; press;;
         26) perm_hub;;
         27) ann_menu;;
-        0) save_conf; echo "再见!"; exit 0;;
+        0|q|Q) save_conf; echo "再见!"; exit 0;;
         *) ;;
         esac
     done
@@ -8114,7 +8181,7 @@ if [ ! -f "$CONF_FILE" ]; then
     echo -e "  ${C}${DEFAULT_ROOT}${R}"
     echo
     ask "服务器根目录: "
-    read -r p || exit 0
+    rd p || exit 0
     if [ -n "$p" ]; then
         ROOT=$(eval echo "${p/#\~/$HOME}")
     else
@@ -8136,7 +8203,7 @@ if [ ! -f "$CONF_FILE" ]; then
 
     echo
     ask "Modrinth API 地址 (直接回车=官方, 可填镜像): "
-    read -r p || exit 0
+    rd p || exit 0
     [ -n "$p" ] && MR_API="$p"
     save_conf
     say "配置已保存到 $CONF_FILE, 下次自动读取."
@@ -8222,7 +8289,9 @@ main_menu
 #    想改成自己的地址完全允许(菜单 27 -> 3), 但把改过的版本分发
 #    给他人时, 必须一并提供完整源码并以同样 GPL-3.0 授权。
 #
-#  本项目与 Mojang Studios / Microsoft 无任何关联, 非官方产品。
+#  本项目与 Mojang Studios / Microsoft / 各加载器与模组项目
+#  及其开发团队均无任何隶属、授权、赞助或合作关系, 非官方产品。
+#  本脚本不分发任何受著作权保护的游戏文件。
 #  SPDX-License-Identifier: GPL-3.0-or-later
 #
 #  ---- 全文结束 ----
