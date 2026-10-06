@@ -1,6 +1,29 @@
-# MC 开服器 (mcserv) v1.6
+# ShCraft (`mcserv.sh`) v1.6
 
 Termux / Linux 上跑 Minecraft 服务端的脚本型启动器。手机也能开服。
+
+> 品牌名 **ShCraft** = 脚本文件 `mcserv.sh`。
+
+## ⚠️ 免责声明 / Disclaimer
+
+**本项目是独立的第三方开源工具，与以下各方均无任何隶属、授权、赞助或合作关系：**
+
+- **Mojang Studios**（Mojang AB）
+- **Microsoft Corporation**（微软，Mojang 的母公司）
+- **NeoForge / Forge / Fabric / Paper / Spigot / Bukkit** 等各加载器与服务端项目及其开发团队
+- 本项目所下载、安装的任何模组、插件、整合包的原作者与发行方
+
+具体说明：
+
+1. **"Minecraft" 是 Mojang Studios 的商标**，本项目仅在描述性语境下使用该名称，用以说明本工具所服务的软件对象，不代表任何商标主张。
+2. 本项目**不分发、不包含、不内置**任何 Minecraft 客户端、服务端 jar、模组或插件的副本。所有游戏文件均在运行时由用户自行从各官方或第三方源下载，版权归各自权利人所有。
+3. 本项目所内置的下载镜像（Modrinth、MCIM、BMCLAPI 等）均为公开服务的直链引用，本项目不对其内容负责。
+4. 使用本项目即表示你确认：你已合法拥有 Minecraft 及所使用的模组、插件，并自行承担因使用本项目所产生的一切风险与责任。
+5. 本项目按 "AS IS"（原样）提供，作者不对服务中断、存档损坏、数据丢失或任何直接或间接损失承担责任。
+
+---
+
+**This project is an independent third-party open source tool. It is NOT affiliated with, authorized by, endorsed by, or sponsored by Mojang Studios, Microsoft Corporation, or any mod loader / mod / plugin project mentioned herein. "Minecraft" is a trademark of Mojang Studios and is used here for descriptive purposes only. This project does not distribute any copyrighted game files.**
 
 ## 许可证
 
