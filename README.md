@@ -1,4 +1,4 @@
-# ShCraft v1.6.1
+# ShCraft
 
 > 品牌名 **ShCraft** = 脚本文件 `mcserv.sh`
 
